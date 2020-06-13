@@ -12,6 +12,7 @@ const rl =readline.createInterface({
 });
 
 unused_outputs = new Map();
+pendingTransactions = [];
 
 function details(data){
     //const transactionID_I = crypto.createHash('sha256').update(Buffer.from(dat)).digest('hex');
