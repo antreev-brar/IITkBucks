@@ -166,7 +166,7 @@ rl.question("Enter the path to the transaction :",(path)=>{
     
     let data=fs.readFileSync(path);
     //console.log(data.length);
-    var transObj_andHash = details(data)
+    var transObj_andHash = details(data);
     if (verify_transaction(transObj_andHash[0],transObj_andHash[1]) == true){console.log("Verified");}
     else{console.log("Not Verified");}
     rl.close();
