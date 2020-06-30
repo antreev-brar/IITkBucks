@@ -38,7 +38,7 @@ app.get('/getBlock/:num',(req,res,next)=>{
 
     console.log(`index demanded is ${req.params.num}`);
     var path = './blocks/'+req.params.num+'.dat';
-    if (fs. existsSync(path)) {
+    if (fs.existsSync(path)) {
          console. log("File exists.");
            //res.statusCode= 200;
         res.setHeader('Content-Type', 'application/octet-stream');
