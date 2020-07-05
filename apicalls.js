@@ -102,12 +102,22 @@ app.get('/getPeers',(req,res,next)=>{
 app.post('/newBlock',(req,res,next)=>{
 
     var buffer = req.body;
+
+    if(verifyBlock(buffer)=== true)
+    {
+    killworker(worker);
+    block_index++;
     fs.writeFile(`blocks/${block_index}.dat`, buffer, function (err) {
             if (err) throw err;
             console.log('Saved!');
           });
-    block_index++;
-    res.send("block added");
+
+        res.send("block added");
+    }
+    else{
+        console.log('not verified')
+    }
+
 });
 app.post('/newTransaction',(req,res,next)=>{
         

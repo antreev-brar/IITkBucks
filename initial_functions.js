@@ -6,6 +6,8 @@ const crypto = require("crypto");
 const Transaction = require ("./classes/Transaction");
 const Input = require ("./classes/Input");
 const Output = require ("./classes/Output");
+const BlockHead = require ("./classes/BlockHead");
+const { Worker } = require('worker_threads');
 
 var app = express();
 app.use(bodyParser.json({extended: false }));
@@ -14,8 +16,11 @@ var potentialPeers=["http://localhost:8787/newPeer"];
 var peers =[]
 var max_peers_length = 3
 var pendingTransactions = [];
+var temparray = {};
 unused_outputs = new Map();
 var block_index=3;
+
+const worker = new Worker('./worker.js');
 
 //function to remove tranaction
 function removeElement(array, elem) {
@@ -210,7 +215,10 @@ function process(Block,blocknum){
 
         for (var j = 0 ;j < curr_transaction.numInputs ; j++){
             var tuple =[ curr_transaction.inputs[j].transactionID, curr_transaction.inputs[j].index ].toString();
-            unused_outputs.delete(tuple);
+            
+            if (unusedOutputs.has(tuple)){
+                unused_outputs.delete(tuple);
+            }
         }
 
         for(var k = 0 ;k < curr_transaction.numOutputs ; k++){
@@ -400,6 +408,161 @@ function getPendingTransactions(url_){
                 }        
       });
 }
+function transitionToByteArrayInput(buff,_transid , _index , _length_sign , _sign){
+    var buf1 = Buffer.from(_transid,"hex");
+    //console.log(buf1.length)
+    var buf2 = Buffer.alloc(4);
+    buf2.writeInt32BE(_index, 0);
+    //console.log(buf2.length)
+    var buf3 = Buffer.alloc(4);
+    buf3.writeInt32BE(_length_sign, 0);
+    //console.log(buf3.length)
+    var buf4=Buffer.from(_sign , 'hex');
+    //console.log(buf4.length)
+    var buf = Buffer.concat([buff,buf1,buf2,buf3,buf4]);
+    return buf ;
+}
+function transitionToByteArrayOutput(bufff,_coins , _length_pubkey , _pubkey){
+ 
+    var buf1 = Buffer.alloc(8);
+    buf1.writeBigInt64BE(BigInt(_coins), 0);
+    var buf2 = Buffer.alloc(4);
+    buf2.writeInt32BE(_length_pubkey, 0);
+    var buf3=Buffer.from(_pubkey , 'utf-8');
+    var buf = Buffer.concat([bufff,buf1,buf2,buf3]);
+    return buf ;
+}
+
+function inputBuffer(i,inputarray){
+    var numi = Buffer.alloc(4)
+    numi.writeInt32BE(i,0);
+    var bufi = Buffer.alloc(0);
+    for (var j =0;j<i;j++){
+       bufi = transitionToByteArrayInput(bufi,inputarray[j].TransID ,inputarray[j].index , inputarray[j].length_sign , inputarray[j].signature);
+    }
+    return [numi,bufi]
+}
+function outputBuffer(o,outputarray){
+    var numo = Buffer.alloc(4);
+    numo.writeInt32BE(o,0);
+    var bufo= Buffer.alloc(0);
+    for (var j =0;j<o;j++){
+      bufo = transitionToByteArrayOutput(bufo,outputarray[j].coins ,outputarray[j].length_pubkey , outputarray[j].pubkey);
+    }
+  return [numo,bufo]
+}
+
+function transactionToBuffer(transaction){
+    var i = transaction.numInputs;
+    var o = transaction.numOutputs;
+    var inputarray = transaction.inputs;
+    var outputarray = transaction.output;
+
+    //console.log(inputarray.length)
+      var bufferInput =inputBuffer(i,inputarray)
+      var bufferOutput =outputBuffer(o,outputarray)
+      var trans =new Transaction(bufferInput[0],bufferInput[1],bufferOutput[0],bufferOutput[1]);
+    // console.log(bufi.length);
+    // console.log(bufi.toString('ascii'));
+    // console.log(bufo.length);
+    var buf = Buffer.concat([trans.numInputs,trans.inputs ,trans.numOutputs, trans.outputs]);
+    // console.log(buf);
+    console.log(buf.length);
+    hashed = crypto.createHash('sha256').update(bufferOutput).digest('hex');
+    console.log(hashed);
+    // sending buffer and buffer output for signature verification
+    return [buf , hashed] ;
+}
+// code for worker miner 
+let worker = new Worker('./worker.js');
+function makeBlock(worker){
+    var buffer =  Buffer.alloc(0);
+    let size = 0;
+    let i = 0 ;
+    let fees = 0;
+    var blockReward = 0;
+    var flag_ = true ;
+    while(i<pendingTransactions.length){
+            var tempBuffer = transactionToBuffer(pendingTransactions[i]);
+            size += tempBuffer[0].length;
+            
+            var transSize = Buffer.alloc(4);
+            transSize.writeInt32BE(tempBuffer[0].length, 0);
+            if(size >= 1000000) break ;
+
+            var hashed_output = tempBuffer[1];
+            if(verify_transaction(pendingTransactions[i] , hashed_output) === true){
+            for (var j = 0 ;j < pendingTransactions[i].numInputs ; j++)
+                {
+                    var tuple =[ pendingTransactions[i].inputs[j].transactionID, pendingTransactions[i].inputs[j].index ].toString();
+                    
+                    if(tuple in unused_outputs){
+                    fees += unused_outputs[tuple].coins;
+                    temparray[tuple] = unused_outputs[tuple];
+                    unused_outputs.delete(tuple);
+                    }
+                }
+            for (var j = 0 ;j < pendingTransactions[i].numOutputs ; j++){
+                fees -= pendingTransactions[i].outputs[j].coins;
+            }  
+
+
+            }else{
+                break;
+            }
+            i++;
+
+            buffer  = Buffer.concat([buffer ,transSize, tempBuffer]);
+    }
+
+    var out = new Output(fees+coinReward ,pub_keylen , pub_key );
+
+    var nodeTrans = new Transaction(0,[],1,out);
+    var nodeTransbuf = transactionToBuffer(nodeTrans);
+    var nodeTransbufSize = Buffer.alloc(4);
+    nodeTransbufSize.writeInt32BE(nodeTransbuf[0], 0);
+    buffer = Buffer.concat([nodeTransbufSize , nodeTransbuf , buffer]);
+    var numberTrans = Buffer.alloc(4);
+    numberTrans.writeInt32BE(i+1, 0);
+    buffer = Buffer.concat([numberTrans , buffer]);
+
+    //make block header
+    var index = last_index // function to get last index available to be added later
+    var hash = crypto.createHash('sha256').update(buffer).digest('hex');
+    var hashParent = getPrevHash(index);
+    var target = '000000f'+ '0'.repeat(57);
+    var blockhead = new Blockhead(index , hashParent , hash , target);
+
+    worker.postMessage({ header : blockhead});
+    worker.on('message', message => {
+        console.log("Message received: ", message);
+        for (let key in temparray) {
+            unused_outputs[key] = temparray[key];
+            delete temparray[key];
+        }
+        var blockHead = Buffer.from(message.header);
+        var Block  =Buffer.concat([blockHead,buffer]);
+        postBlock(block);
+    });
+
+}
+function postBlock(block){
+    console.log(block.length);
+    block_index++;
+    process(block,block_index);
+}
+
+function killworker(worker){
+    worker.terminate();
+    console.log('worker died :)');
+    for (let key in temparray) {
+            unused_outputs[key] = temparray[key];
+            delete temparray[key];
+        }
+}
+////////////////////////
+
+
 // all these endpoints were used for testing : 
 //--------------------------------------------------------------------------
 app.get('/getPendingTransactions',(req,res,next)=>{
