@@ -514,6 +514,11 @@ function makeBlock(worker){
 
             buffer  = Buffer.concat([buffer ,transSize, tempBuffer]);
     }
+    for (let key in temparray) {
+        unused_outputs[key] = temparray[key];
+        delete temparray[key];
+    }
+
 
     var out = new Output(fees+coinReward ,pub_keylen , pub_key );
 
@@ -536,10 +541,6 @@ function makeBlock(worker){
     worker.postMessage({ header : blockhead});
     worker.on('message', message => {
         console.log("Message received: ", message);
-        for (let key in temparray) {
-            unused_outputs[key] = temparray[key];
-            delete temparray[key];
-        }
         var blockHead = Buffer.from(message.header);
         var Block  =Buffer.concat([blockHead,buffer]);
         postBlock(block);
@@ -555,10 +556,7 @@ function postBlock(block){
 function killworker(worker){
     worker.terminate();
     console.log('worker died :)');
-    for (let key in temparray) {
-            unused_outputs[key] = temparray[key];
-            delete temparray[key];
-        }
+
 }
 ////////////////////////
 
