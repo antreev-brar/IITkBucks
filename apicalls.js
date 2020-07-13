@@ -15,8 +15,9 @@ var max_peers_length = 3
 var potentialPeers=[]
 var pendingTransactions = [];
 var block_index=2;
-var peers =[]
-
+var peers = [ 'http://86c3a429b6b0.ngrok.io','http://0b7c83529168.ngrok.io'];
+var alias = new Map();
+var unusedOuputsPubkey = new Map();
 app.use(function (req, res, next) {
     if (req.headers['content-type'] === 'application/octet-stream') {
         getRawBody(req, {
@@ -111,7 +112,7 @@ app.post('/newBlock',(req,res,next)=>{
             if (err) throw err;
             console.log('Saved!');
           });
-
+        sendtoPeers(block);
         res.send("block added");
     }
     else{
@@ -134,6 +135,45 @@ app.post('/newTransaction',(req,res,next)=>{
         pendingTransactions.push(_transaction);
        
        res.send("transaction added to PendingTransaction : Length"+pendingTransactions.length);
+});
+app.post('/addAlias',(req,res,next)=>{
+    if(alias.has(req.body.alias)){
+        res.sendStatus(400);
+    }else{
+        alias.set(req.body.alias , req.body.publicKey);
+        //write a code to propagate this fact
+        sendAliasToPeers(req.body.alias , req.body.publicKey);
+        ////////////////////////////////////
+        res.sendStatus(200);
+    }
+});
+app.post('/getPublicKey',(req,res,next)=>{
+    if(alias.has(req.body.alias)){
+        res.setHeader('Content-Type', 'application/json');
+        let obj = {"publicKey" : alias[req.body.alias]}
+        res.json(obj);
+    }else{
+        res.sendStatus(404);
+    }
+});
+app.post('/getUnusedOutputs',(req,res,next)=>{
+    if(req.body.hasOwnProperty('alias')){
+        if(alias.has(req.body.alias)){
+            let pubkey__ = alias[req.body.alias]
+            if(unusedOuputsPubkey.has(pubkey__)){
+            let obj = {"unusedOutputs" :unusedOuputsPubkey[pubkey__] }
+            res.json(obj);
+        }
+        }
+    }else if(req.body.hasOwnProperty('publicKey')){
+            pubkey__ = req.body.publicKey;
+            if(unusedOuputsPubkey.has(pubkey__)){
+                let obj = {"unusedOutputs" :unusedOuputsPubkey[pubkey__] }
+                res.json(obj);
+            }
+    }
+    
+
 });
 const port =8787
 app.listen(port,function(error){

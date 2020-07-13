@@ -193,7 +193,12 @@ function verify_transaction(trans , hashed_output){
     }
     
 }
-
+function addValueToList(mapp,key, value) {
+    //if the list is already created for the "key", then uses it
+    //else creates new list for the "key" to store multiple values in it.
+    mapp[key] = mapp[key] || [];
+    mapp[key].push(value);
+}
 // function to process the block
 function process(Block,blocknum){
     let block = Buffer.from(Block);
@@ -225,6 +230,14 @@ function process(Block,blocknum){
             var tuple =[ transaction_ID, k].toString();
             unused_outputs.set(tuple, curr_transaction.outputs[k]);
         }
+    }
+    unusedOuputsPubkey.clear()
+    for(let [key, value] of unused_outputs){
+        //var split = i.split(',')
+        console.log(key[0])
+        let ob ={"transactionId":key[0],"index":key[1],amount:value.coins}
+    
+        addValueToList(unusedOuputsPubkey,value.publicKey,ob);
     }
 
     fs.writeFile(`blocks/${blocknum}.dat`, block, function (err) {
@@ -551,8 +564,49 @@ function postBlock(block){
     console.log(block.length);
     block_index++;
     process(block,block_index);
+    sendtoPeers(block);
 }
+function sendtoPeers(block){
+    var i;
+        for (i = 0; i < peers.length; i++) { 
+            console.log("Antreev-brar Sent "+peers[i]);
+            request({
+                url: peers[i],
+                method: 'POST',
+                body: block,
+                encoding: null
+              }, (error, response, body) => {
+                if (error) {
+                   console.log('Error sending message: ', error)
+                } else {
+                  console.log('Response: ', response.body)
+                }
+              })
+            }
+}
+function sendAliasToPeers(_alias,publicKey){
+    var i;
+        for (i = 0; i < peers.length; i++) { 
+            console.log("Antreev-brar Sent alias to"+peers[i]);
+            request.post(
+                {
+                url:peers[i]+'/addAlias',
+                json: {
+                  "alias":_alias,
+                  "publicKey":publicKey
+                    },
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+                },
+              function(error, response, body){
+                console.log("error  :" +error);
+                //console.log(response);
+                //console.log(JSON.stringify(body));
+              });
+            }
 
+}
 function killworker(worker){
     worker.terminate();
     console.log('worker died :)');
