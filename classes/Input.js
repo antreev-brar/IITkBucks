@@ -1,6 +1,6 @@
 class Input {
-    constructor (transactionID, index, sign_length, sign) {
-        this.transactionID = transactionID;
+    constructor (transactionId, index, sign_length, sign) {
+        this.transactionId = transactionId;
         this.index = index;
         this.sign_length = sign_length;
         this.sign = sign;

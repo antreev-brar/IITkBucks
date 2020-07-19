@@ -1,7 +1,7 @@
 {
     "public-key" : "",
-    
-    "my-url" : "",
-    "potential-peers" : [],
+    "myurl" : "http://8cf97055ddc3.ngrok.io",
+    "potential_peers" : ["https://iitkbucks.pclub.in/"],
     "port" : 3000
 }
+
